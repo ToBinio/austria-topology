@@ -1,7 +1,10 @@
+use futures::executor::block_on;
+use futures::future::join_all;
 use serde::Deserialize;
+use tokio::runtime::Runtime;
 
-const MAX_X: u32 = 320;
-const MAX_Z: u32 = 120;
+const MAX_X: u32 = 80;
+const MAX_Z: u32 = 30;
 
 pub struct Topology {
     pub vertices: Vec<[f32; 3]>,
@@ -10,7 +13,9 @@ pub struct Topology {
 
 pub fn get_topology() -> Topology {
     let cords = calc_cords();
-    let heights = fetch_heights(&cords);
+
+    let runtime = Runtime::new().unwrap();
+    let heights = runtime.block_on(async { fetch_heights(&cords).await });
 
     let vertices = cords
         .iter()
@@ -81,31 +86,33 @@ struct PointResponse {
     elevation: f32,
 }
 
-fn fetch_heights(cords: &Vec<Cord>) -> Vec<f32> {
-    cords
-        .chunks(100)
-        .flat_map(|cords| {
-            let search = cords
-                .iter()
-                .map(|cord| format!("{},{}", cord.latitude, cord.longitude))
-                .collect::<Vec<String>>()
-                .join("|");
-
-            let response = ureq::get(&format!(
-                "http://localhost:5000/v1/eudem25m?locations={}",
-                search
-            ))
-            .call()
-            .unwrap();
-
-            let response =
-                serde_json::from_str::<PointsResponse>(&response.into_string().unwrap()).unwrap();
-
-            response
-                .results
-                .iter()
-                .map(|response| response.elevation)
-                .collect::<Vec<f32>>()
-        })
+async fn fetch_heights(cords: &[Cord]) -> Vec<f32> {
+    join_all(cords.chunks(100).map(fetch_data))
+        .await
+        .into_iter()
+        .flatten()
         .collect()
+}
+
+async fn fetch_data(cords: &[Cord]) -> Vec<f32> {
+    let search = cords
+        .iter()
+        .map(|cord| format!("{},{}", cord.latitude, cord.longitude))
+        .collect::<Vec<String>>()
+        .join("|");
+
+    let response = reqwest::get(&format!(
+        "http://localhost:5000/v1/eudem25m?locations={}",
+        search
+    ))
+    .await
+    .unwrap();
+
+    let response = response.json::<PointsResponse>().await.unwrap();
+
+    response
+        .results
+        .iter()
+        .map(|response| response.elevation)
+        .collect::<Vec<f32>>()
 }
