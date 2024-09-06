@@ -20,8 +20,6 @@ fn main() {
 /// A marker component for our shapes so we can query them separately from the ground plane
 #[derive(Component)]
 struct Shape;
-const Z_EXTENT: f32 = 5.0;
-
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,

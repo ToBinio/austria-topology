@@ -1,4 +1,3 @@
-use futures::executor::block_on;
 use futures::future::join_all;
 use serde::Deserialize;
 use tokio::runtime::Runtime;
